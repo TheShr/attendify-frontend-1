@@ -84,7 +84,6 @@
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
       "core-js"
-      /* add "better-sqlite3" here ONLY if you truly need it at build/runtime on Vercel */
     ]
   }
 }
