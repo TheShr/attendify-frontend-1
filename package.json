@@ -2,7 +2,7 @@
   "name": "my-v0-project",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.19.4",
+  "packageManager": "pnpm@10.20.0",
   "engines": {
     "node": "22.x"
   },
@@ -84,6 +84,7 @@
     "onlyBuiltDependencies": [
       "@tailwindcss/oxide",
       "core-js"
+      /* add "better-sqlite3" here ONLY if you truly need it at build/runtime on Vercel */
     ]
   }
 }
