@@ -2,10 +2,6 @@
   "name": "my-v0-project",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.20.0",
-  "engines": {
-    "node": "22.x"
-  },
   "scripts": {
     "build": "next build",
     "dev": "next dev",
@@ -79,11 +75,5 @@
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
     "typescript": "^5"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@tailwindcss/oxide",
-      "core-js"
-    ]
   }
 }
