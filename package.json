@@ -1,11 +1,10 @@
-18.20.4
 {
   "name": "my-v0-project",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@10.17.0",
   "engines": {
-    "node": "18.20.4"
+    "node": "22.x"
   },
   "scripts": {
     "build": "next build",
