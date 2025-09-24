@@ -1,9 +1,13 @@
 {
+  "framework": "nextjs",
+  "installCommand": "corepack enable && pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm build",
+  "outputDirectory": ".next",
   "build": {
     "env": {
       "NPM_CONFIG_REGISTRY": "https://registry.npmjs.org/",
+      "NEXT_PRIVATE_SKIP_APPROVE_BUILDS": "1",
       "NODE_OPTIONS": "--max-old-space-size=4096"
     }
-  },
-  "installCommand": "corepack enable && pnpm install --no-frozen-lockfile"
+  }
 }
