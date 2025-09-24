@@ -5,19 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CameraFeed } from "@/components/camera/camera-feed";
+import { CameraFeed, type AttendanceMarkResult as DetectedFace } from "@/components/camera/camera-feed"; // ✅ import type
 import { GeofencingStatus } from "@/components/camera/geofencing-status";
 import { ManualAttendance } from "@/components/teacher/manual-attendance";
 import { Play, Square, Camera, MapPin, Clock, Users } from "lucide-react";
 
 type PresentableStatus = "present" | "absent" | "late";
-
-interface DetectedFace {
-  id: string;         // MUST match students.id in DB
-  name: string;
-  confidence: number; // 0..1
-  timestamp?: Date;   // <-- optional to avoid TS error
-}
 
 const RECENT_LIMIT = 30;         // keep only last N badges
 const DETECTION_FLUSH_MS = 300;  // throttle rate for updates
@@ -35,7 +28,7 @@ export default function AttendanceSession() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Refs (not reactive): fast, no re-render storms
+  // Refs (not reactive)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uniqueRef = useRef<Map<string, DetectedFace>>(new Map());
   const pendingRef = useRef<DetectedFace[]>([]);
@@ -53,13 +46,17 @@ export default function AttendanceSession() {
           setClasses(data.data);
           if (data.data.length === 1) setSelectedClass(String(data.data[0].id));
         }
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const classLabel = useMemo(() => {
-    const cls = classes.find(c => String(c.id) === selectedClass);
+    const cls = classes.find((c) => String(c.id) === selectedClass);
     if (!cls) return "";
     return `${cls.class_name}${cls.section ? ` • ${cls.section}` : ""}`;
   }, [classes, selectedClass]);
@@ -82,7 +79,7 @@ export default function AttendanceSession() {
     setRecent([]);
 
     // 1-second timer
-    timerRef.current = setInterval(() => setSessionTime(t => t + 1), 1000);
+    timerRef.current = setInterval(() => setSessionTime((t) => t + 1), 1000);
   }
 
   async function stopSession() {
@@ -105,20 +102,22 @@ export default function AttendanceSession() {
       const pending = pendingRef.current;
       if (pending.length === 0) return;
 
-      // total scans is cheap
-      setTotalScans(t => t + pending.length);
+      // total scans
+      setTotalScans((t) => t + pending.length);
 
-      // update unique map with best-confidence record per id
+      // update unique map
       const map = uniqueRef.current;
       for (const s of pending) {
-        const prev = map.get(s.id);
-        if (!prev || prev.confidence < s.confidence) map.set(s.id, s);
+        const prev = map.get(String(s.studentId ?? s.id));
+        if (!prev || (s.score ?? 0) > (prev.score ?? 0)) {
+          map.set(String(s.studentId ?? s.id), s);
+        }
       }
       pendingRef.current = [];
 
-      // update unique count + recent list (cap)
+      // update state
       setUniqueCount(map.size);
-      setRecent(prev => {
+      setRecent((prev) => {
         const merged = [...prev, ...pending].slice(-RECENT_LIMIT);
         return merged;
       });
@@ -128,30 +127,26 @@ export default function AttendanceSession() {
   // Called by CameraFeed
   function handleFaceDetected(faces: DetectedFace[]) {
     if (!faces || faces.length === 0) return;
-    const normalized = faces.map(f => ({
-      ...f,
-      timestamp: f.timestamp
-        ? f.timestamp instanceof Date
-          ? f.timestamp
-          : new Date(f.timestamp as any)
-        : new Date(), // fallback if missing
-    }));
-    pendingRef.current.push(...normalized);
+    pendingRef.current.push(...faces);
     scheduleFlush();
   }
 
   function handleManualAttendance(student: { id: string; name: string; status?: PresentableStatus }) {
     const entry: DetectedFace = {
-      id: student.id,
+      matched: true,
+      studentId: Number(student.id),
       name: student.name,
       confidence: 1.0,
-      timestamp: new Date(),
+      distance: null,
+      score: 1,
+      threshold: 0,
+      createdAt: new Date().toISOString(),
     };
     pendingRef.current.push(entry);
     scheduleFlush();
   }
 
-  // Cleanup on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -159,7 +154,7 @@ export default function AttendanceSession() {
     };
   }, []);
 
-  // Save to API using your schema
+  // Save to API
   async function saveAttendance() {
     if (!selectedClass) {
       setMessage("No class selected.");
@@ -175,11 +170,11 @@ export default function AttendanceSession() {
     setMessage(null);
     try {
       const date = new Date().toISOString().slice(0, 10);
-      const items = Array.from(uniq.values()).map(s => ({
-        student_id: Number(s.id),
+      const items = Array.from(uniq.values()).map((s) => ({
+        student_id: Number(s.studentId ?? s.id),
         status: "present",
-        time: (s.timestamp ?? new Date()).toISOString(),
-        recognized_name: s.name,
+        time: s.createdAt,
+        recognized_name: s.name ?? s.recognizedName ?? s.username,
       }));
 
       const res = await fetch("/api/attendance/history", {
@@ -225,7 +220,8 @@ export default function AttendanceSession() {
               <SelectContent>
                 {classes.map((cls) => (
                   <SelectItem key={cls.id} value={String(cls.id)}>
-                    {cls.class_name}{cls.section ? ` • ${cls.section}` : ""}
+                    {cls.class_name}
+                    {cls.section ? ` • ${cls.section}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -275,8 +271,9 @@ export default function AttendanceSession() {
                   <h4 className="text-sm font-medium">Recent Detections</h4>
                   <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">
                     {recent.slice(-RECENT_LIMIT).map((s, i) => (
-                      <Badge key={`${s.id}-${i}`} variant="secondary" className="text-xs">
-                        {s.name} {(s.confidence * 100).toFixed(0)}%
+                      <Badge key={`${s.studentId ?? s.id}-${i}`} variant="secondary" className="text-xs">
+                        {(s.recognizedName ?? s.name ?? s.username) || "Unknown"}{" "}
+                        {s.score !== null && s.score !== undefined ? `${(s.score * 100).toFixed(0)}%` : ""}
                       </Badge>
                     ))}
                   </div>
@@ -305,18 +302,12 @@ export default function AttendanceSession() {
 
       {sessionActive && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <CameraFeed
-            isActive={cameraActive}
-            onToggle={setCameraActive}
-            onFaceDetected={handleFaceDetected}
-          />
+          <CameraFeed isActive={cameraActive} onToggle={setCameraActive} onFaceDetected={handleFaceDetected} />
           <GeofencingStatus isActive={sessionActive} />
         </div>
       )}
 
-      {sessionActive && (
-        <ManualAttendance classId={selectedClass} onAddStudent={handleManualAttendance} />
-      )}
+      {sessionActive && <ManualAttendance classId={selectedClass} onAddStudent={handleManualAttendance} />}
     </div>
   );
 }
