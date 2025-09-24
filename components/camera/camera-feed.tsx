@@ -23,14 +23,21 @@ export interface AttendanceMarkResult {
   attendanceRecorded?: boolean
 }
 
+export interface DetectedFace {
+  id: string
+  boundingBox: { x: number; y: number; width: number; height: number }
+  confidence: number
+}
+
 interface CameraFeedProps {
   isActive: boolean
   onToggle: (active: boolean) => void
   onRecognized?: (result: AttendanceMarkResult) => void
+  onFaceDetected?: (faces: DetectedFace[]) => void   // ✅ added here
   classId?: number | null
 }
 
-export function CameraFeed({ isActive, onToggle, onRecognized, classId }: CameraFeedProps) {
+export function CameraFeed({ isActive, onToggle, onRecognized, onFaceDetected, classId }: CameraFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [stream, setStream] = useState<MediaStream | null>(null)
@@ -46,7 +53,6 @@ export function CameraFeed({ isActive, onToggle, onRecognized, classId }: Camera
     } else {
       stopCamera()
     }
-
     return () => {
       stopCamera()
     }
@@ -112,10 +118,7 @@ export function CameraFeed({ isActive, onToggle, onRecognized, classId }: Camera
   }
 
   const captureAndAnalyzeFrame = async () => {
-    if (inFlightRef.current) {
-      return
-    }
-
+    if (inFlightRef.current) return
     if (!videoRef.current || !canvasRef.current) return
 
     const video = videoRef.current
@@ -135,6 +138,7 @@ export function CameraFeed({ isActive, onToggle, onRecognized, classId }: Camera
       if (typeof classId === "number" && Number.isFinite(classId)) {
         payload.classId = classId
       }
+
       const result = await apiJson<AttendanceMarkResult>("/attendance/mark", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -143,6 +147,18 @@ export function CameraFeed({ isActive, onToggle, onRecognized, classId }: Camera
 
       setRecords((prev) => [...prev, result].slice(-10))
       onRecognized?.(result)
+
+      // ✅ simulate face detection callback if needed
+      if (onFaceDetected) {
+        const faces: DetectedFace[] = [
+          {
+            id: `${Date.now()}`,
+            boundingBox: { x: 0, y: 0, width: canvas.width, height: canvas.height },
+            confidence: result.score ?? 1,
+          },
+        ]
+        onFaceDetected(faces)
+      }
     } catch (err) {
       console.error("Error sending frame to attendance endpoint:", err)
       setError("Unable to send frame to attendance service.")
@@ -229,7 +245,10 @@ export function CameraFeed({ isActive, onToggle, onRecognized, classId }: Camera
             {latestRecords.length > 0 ? (
               <div className="space-y-2 max-h-32 overflow-y-auto">
                 {latestRecords.map((record, index) => (
-                  <div key={`${record.createdAt}-${index}`} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                  <div
+                    key={`${record.createdAt}-${index}`}
+                    className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                  >
                     <div>
                       <span className="text-sm font-medium">
                         {record.matched
