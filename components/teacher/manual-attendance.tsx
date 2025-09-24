@@ -25,6 +25,7 @@ export interface ManualAttendanceSummary {
 interface ManualAttendanceProps {
   classId: string | number | null
   onSubmit?: (summary: ManualAttendanceSummary) => void
+  onAddStudent?: (student: { id: string; name: string; status?: "present" | "absent" | "late" }) => void
 }
 
 interface StudentOption {
@@ -46,7 +47,7 @@ function getDefaultTime(): string {
   return now.toISOString().slice(11, 16)
 }
 
-function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
+function ManualAttendance({ classId, onSubmit, onAddStudent }: ManualAttendanceProps) {
   const { toast } = useToast()
   const [students, setStudents] = useState<StudentOption[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -58,16 +59,10 @@ function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
   const [isSaving, setIsSaving] = useState(false)
 
   const numericClassId = useMemo(() => {
-    if (classId === null || classId === undefined) {
-      return null
-    }
-    if (typeof classId === "number") {
-      return Number.isFinite(classId) ? classId : null
-    }
+    if (classId === null || classId === undefined) return null
+    if (typeof classId === "number") return Number.isFinite(classId) ? classId : null
     const trimmed = classId.trim()
-    if (!trimmed) {
-      return null
-    }
+    if (!trimmed) return null
     const value = Number(trimmed)
     return Number.isFinite(value) ? value : null
   }, [classId])
@@ -88,14 +83,12 @@ function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
         if (!active) return
         setStudents(data.students ?? [])
         setSelection({})
-      } catch (error) {
+      } catch {
         if (!active) return
         setLoadError("Unable to load enrolled students for the selected class.")
         setStudents([])
       } finally {
-        if (active) {
-          setIsLoading(false)
-        }
+        if (active) setIsLoading(false)
       }
     }
 
@@ -119,13 +112,11 @@ function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
     })
   }, [students, searchTerm])
 
-  const presentCount = useMemo(() => {
-    return Object.keys(selection).length
-  }, [selection])
-
-  const lateCount = useMemo(() => {
-    return Object.values(selection).filter((status) => status === "late").length
-  }, [selection])
+  const presentCount = useMemo(() => Object.keys(selection).length, [selection])
+  const lateCount = useMemo(
+    () => Object.values(selection).filter((status) => status === "late").length,
+    [selection]
+  )
 
   const handleToggleStudent = (studentId: number, value: boolean | "indeterminate") => {
     const isChecked = value === true
@@ -136,26 +127,43 @@ function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
       } else {
         delete next[studentId]
       }
+
+      // fire callback to parent
+      const student = students.find((s) => s.studentId === studentId)
+      if (student) {
+        onAddStudent?.({
+          id: String(student.studentId),
+          name: student.name,
+          status: isChecked ? (next[studentId] ?? "present") : "absent",
+        })
+      }
+
       return next
     })
   }
 
   const handleStatusChange = (studentId: number, status: "present" | "late") => {
-    setSelection((prev) => ({ ...prev, [studentId]: status }))
+    setSelection((prev) => {
+      const next = { ...prev, [studentId]: status }
+      const student = students.find((s) => s.studentId === studentId)
+      if (student) {
+        onAddStudent?.({
+          id: String(student.studentId),
+          name: student.name,
+          status,
+        })
+      }
+      return next
+    })
   }
 
   const handleSubmit = async () => {
-    if (numericClassId == null || students.length === 0) {
-      return
-    }
+    if (numericClassId == null || students.length === 0) return
     setIsSaving(true)
     try {
       const records = students.map((student) => {
         const status = selection[student.studentId] ?? "absent"
-        return {
-          studentId: student.studentId,
-          status,
-        }
+        return { studentId: student.studentId, status }
       })
 
       const payload = {
@@ -263,7 +271,7 @@ function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
         <ScrollArea className="h-72 rounded-md border">
           <div className="divide-y">
             {isLoading ? (
-              <div className="p-4 text-sm text-muted-foreground">Loading students?</div>
+              <div className="p-4 text-sm text-muted-foreground">Loading students…</div>
             ) : filteredStudents.length === 0 ? (
               <div className="p-4 text-sm text-muted-foreground">No students found for this class.</div>
             ) : (
@@ -275,7 +283,11 @@ function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
                     <div>
                       <div className="font-medium">{student.name}</div>
                       <div className="text-xs text-muted-foreground">
-                        {student.rollNo ? `Roll: ${student.rollNo}` : student.username ? `User: ${student.username}` : ""}
+                        {student.rollNo
+                          ? `Roll: ${student.rollNo}`
+                          : student.username
+                          ? `User: ${student.username}`
+                          : ""}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -289,7 +301,13 @@ function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
                         <Label htmlFor={`present-${student.studentId}`}>Present</Label>
                       </div>
                       {isSelected && (
-                        <Select value={status} onValueChange={(value) => handleStatusChange(student.studentId, value as "present" | "late")} disabled={isSaving}>
+                        <Select
+                          value={status}
+                          onValueChange={(value) =>
+                            handleStatusChange(student.studentId, value as "present" | "late")
+                          }
+                          disabled={isSaving}
+                        >
                           <SelectTrigger className="w-28">
                             <SelectValue />
                           </SelectTrigger>
@@ -314,11 +332,12 @@ function ManualAttendance({ classId, onSubmit }: ManualAttendanceProps) {
           className="w-full"
         >
           <CheckCircle2 className="h-4 w-4 mr-2" />
-          {isSaving ? "Saving?" : "Save Attendance"}
+          {isSaving ? "Saving…" : "Save Attendance"}
         </Button>
       </CardContent>
     </Card>
   )
 }
-export default ManualAttendance;
-export { ManualAttendance };
+
+export default ManualAttendance
+export { ManualAttendance }
