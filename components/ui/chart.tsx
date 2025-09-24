@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import * as RechartsPrimitive from 'recharts'
-import { TooltipProps, LegendProps } from 'recharts'
+import type { TooltipProps } from 'recharts'
 
 import { cn } from '@/lib/utils'
 
@@ -119,14 +119,14 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: TooltipProps<any, any> & {
-  className?: string
-  hideLabel?: boolean
-  hideIndicator?: boolean
-  indicator?: 'line' | 'dot' | 'dashed'
-  nameKey?: string
-  labelKey?: string
-}) {
+}: TooltipProps<number, string> &
+  React.ComponentProps<'div'> & {
+    hideLabel?: boolean
+    hideIndicator?: boolean
+    indicator?: 'line' | 'dot' | 'dashed'
+    nameKey?: string
+    labelKey?: string
+  }) {
   const { config } = useChart()
 
   const tooltipLabel = React.useMemo(() => {
@@ -183,11 +183,11 @@ function ChartTooltipContent({
         {payload.map((item, index) => {
           const key = `${nameKey || item.name || item.dataKey || 'value'}`
           const itemConfig = getPayloadConfigFromPayload(config, item, key)
-          const indicatorColor = color || item.payload?.fill || item.color
+          const indicatorColor = color || item.payload.fill || item.color
 
           return (
             <div
-              key={item.dataKey || index}
+              key={item.dataKey}
               className={cn(
                 '[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5',
                 indicator === 'dot' && 'items-center',
@@ -257,11 +257,11 @@ function ChartLegendContent({
   payload,
   verticalAlign = 'bottom',
   nameKey,
-}: LegendProps & {
-  className?: string
-  hideIcon?: boolean
-  nameKey?: string
-}) {
+}: React.ComponentProps<'div'> &
+  Pick<RechartsPrimitive.LegendProps, 'payload' | 'verticalAlign'> & {
+    hideIcon?: boolean
+    nameKey?: string
+  }) {
   const { config } = useChart()
 
   if (!payload?.length) {
@@ -276,13 +276,13 @@ function ChartLegendContent({
         className,
       )}
     >
-      {payload.map((item, index) => {
+      {payload.map((item) => {
         const key = `${nameKey || item.dataKey || 'value'}`
         const itemConfig = getPayloadConfigFromPayload(config, item, key)
 
         return (
           <div
-            key={item.value || index}
+            key={item.value}
             className={cn(
               '[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3',
             )}
@@ -308,7 +308,7 @@ function ChartLegendContent({
 // Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(
   config: ChartConfig,
-  payload: any,
+  payload: unknown,
   key: string,
 ) {
   if (typeof payload !== 'object' || payload === null) {
@@ -317,18 +317,18 @@ function getPayloadConfigFromPayload(
 
   const payloadPayload =
     'payload' in payload &&
-    typeof payload.payload === 'object' &&
-    payload.payload !== null
-      ? payload.payload
+    typeof (payload as any).payload === 'object' &&
+    (payload as any).payload !== null
+      ? (payload as any).payload
       : undefined
 
   let configLabelKey: string = key
 
   if (
-    key in payload &&
-    typeof payload[key as keyof typeof payload] === 'string'
+    key in (payload as any) &&
+    typeof (payload as any)[key] === 'string'
   ) {
-    configLabelKey = payload[key as keyof typeof payload] as string
+    configLabelKey = (payload as any)[key] as string
   } else if (
     payloadPayload &&
     key in payloadPayload &&
