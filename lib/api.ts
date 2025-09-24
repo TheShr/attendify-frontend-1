@@ -3,6 +3,8 @@
 // --- Configuration -----------------------------------------------------------
 // Local dev default; change if your backend runs elsewhere in dev.
 const DEV_DEFAULT_API_BASE = "http://localhost:5000/api";
+const DEV_DEFAULT_PROXY_BASE = "/api/backend";
+
 
 // Reads env at runtime in both server and client contexts.
 function readEnv(): string | undefined {
