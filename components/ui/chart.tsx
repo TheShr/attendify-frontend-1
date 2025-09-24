@@ -72,6 +72,7 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
     ([, config]) => config.theme || config.color,
   )
+
   if (!colorConfig.length) return null
 
   return (
@@ -126,6 +127,7 @@ function ChartTooltipContent({
 
   const tooltipLabel = React.useMemo(() => {
     if (hideLabel || !payload?.length) return null
+
     const [item] = payload
     const key = `${labelKey || item?.dataKey || item?.name || 'value'}`
     const itemConfig = getPayloadConfigFromPayload(config, item, key)
@@ -141,10 +143,13 @@ function ChartTooltipContent({
         </div>
       )
     }
-    return value ? <div className={cn('font-medium', labelClassName)}>{value}</div> : null
+
+    if (!value) return null
+    return <div className={cn('font-medium', labelClassName)}>{value}</div>
   }, [label, labelFormatter, payload, hideLabel, labelClassName, config, labelKey])
 
   if (!active || !payload?.length) return null
+
   const nestLabel = payload.length === 1 && indicator !== 'dot'
 
   return (
@@ -159,7 +164,7 @@ function ChartTooltipContent({
         {payload.map((item, index) => {
           const key = `${nameKey || item.name || item.dataKey || 'value'}`
           const itemConfig = getPayloadConfigFromPayload(config, item, key)
-          const indicatorColor = color || (item.payload as any)?.fill || item.color
+          const indicatorColor = color || (item as any).payload?.fill || item.color
 
           return (
             <div
@@ -170,7 +175,7 @@ function ChartTooltipContent({
               )}
             >
               {formatter && item?.value !== undefined && item.name ? (
-                formatter(item.value, item.name, item, index, item.payload)
+                formatter(item.value, item.name, item, index, (item as any).payload)
               ) : (
                 <>
                   {itemConfig?.icon ? (
@@ -178,21 +183,31 @@ function ChartTooltipContent({
                   ) : (
                     !hideIndicator && (
                       <div
-                        className={cn('shrink-0 rounded-[2px]', {
-                          'h-2.5 w-2.5': indicator === 'dot',
-                          'w-1': indicator === 'line',
-                          'w-0 border-[1.5px] border-dashed bg-transparent':
-                            indicator === 'dashed',
-                          'my-0.5': nestLabel && indicator === 'dashed',
-                        })}
-                        style={{
-                          backgroundColor: indicatorColor,
-                          borderColor: indicatorColor,
-                        }}
+                        className={cn(
+                          'shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)',
+                          {
+                            'h-2.5 w-2.5': indicator === 'dot',
+                            'w-1': indicator === 'line',
+                            'w-0 border-[1.5px] border-dashed bg-transparent':
+                              indicator === 'dashed',
+                            'my-0.5': nestLabel && indicator === 'dashed',
+                          },
+                        )}
+                        style={
+                          {
+                            '--color-bg': indicatorColor,
+                            '--color-border': indicatorColor,
+                          } as React.CSSProperties
+                        }
                       />
                     )
                   )}
-                  <div className="flex flex-1 justify-between leading-none">
+                  <div
+                    className={cn(
+                      'flex flex-1 justify-between leading-none',
+                      nestLabel ? 'items-end' : 'items-center',
+                    )}
+                  >
                     <div className="grid gap-1.5">
                       {nestLabel ? tooltipLabel : null}
                       <span className="text-muted-foreground">
@@ -266,6 +281,7 @@ function ChartLegendContent({
   )
 }
 
+// Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(
   config: ChartConfig,
   payload: unknown,
@@ -274,7 +290,7 @@ function getPayloadConfigFromPayload(
   if (typeof payload !== 'object' || payload === null) return undefined
 
   const payloadPayload =
-    'payload' in payload &&
+    'payload' in (payload as any) &&
     typeof (payload as any).payload === 'object' &&
     (payload as any).payload !== null
       ? (payload as any).payload
@@ -282,10 +298,7 @@ function getPayloadConfigFromPayload(
 
   let configLabelKey: string = key
 
-  if (
-    key in (payload as any) &&
-    typeof (payload as any)[key] === 'string'
-  ) {
+  if (key in (payload as any) && typeof (payload as any)[key] === 'string') {
     configLabelKey = (payload as any)[key] as string
   } else if (
     payloadPayload &&
