@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import * as RechartsPrimitive from 'recharts'
-import type { TooltipProps } from 'recharts'
+import type { TooltipProps, TooltipPayload } from 'recharts'
 
 import { cn } from '@/lib/utils'
 
@@ -101,14 +101,15 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
-// ✅ Corrected typing here
-type ChartTooltipContentProps = TooltipProps<number, string> & {
+// ✅ Explicitly define payload as TooltipPayload[]
+interface ChartTooltipContentProps extends TooltipProps<number, string> {
   className?: string
   hideLabel?: boolean
   hideIndicator?: boolean
   indicator?: 'line' | 'dot' | 'dashed'
   nameKey?: string
   labelKey?: string
+  payload?: TooltipPayload<number, string>[] // <-- Fix
 }
 
 function ChartTooltipContent({
