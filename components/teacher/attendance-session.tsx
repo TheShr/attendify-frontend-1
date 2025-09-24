@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { CameraFeed, type AttendanceMarkResult as DetectedFace } from "@/components/camera/camera-feed"; // ✅ import type
+import { CameraFeed, AttendanceMarkResult as DetectedFace } from "@/components/camera/camera-feed";
 import { GeofencingStatus } from "@/components/camera/geofencing-status";
 import { ManualAttendance } from "@/components/teacher/manual-attendance";
 import { Play, Square, Camera, MapPin, Clock, Users } from "lucide-react";
@@ -28,7 +28,7 @@ export default function AttendanceSession() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Refs (not reactive)
+  // Refs (not reactive): fast, no re-render storms
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const uniqueRef = useRef<Map<string, DetectedFace>>(new Map());
   const pendingRef = useRef<DetectedFace[]>([]);
@@ -102,20 +102,21 @@ export default function AttendanceSession() {
       const pending = pendingRef.current;
       if (pending.length === 0) return;
 
-      // total scans
+      // total scans is cheap
       setTotalScans((t) => t + pending.length);
 
-      // update unique map
+      // update unique map with best-confidence record per studentId
       const map = uniqueRef.current;
       for (const s of pending) {
-        const prev = map.get(String(s.studentId ?? s.id));
+        if (!s.studentId) continue;
+        const prev = map.get(String(s.studentId));
         if (!prev || (s.score ?? 0) > (prev.score ?? 0)) {
-          map.set(String(s.studentId ?? s.id), s);
+          map.set(String(s.studentId), s);
         }
       }
       pendingRef.current = [];
 
-      // update state
+      // update unique count + recent list (cap)
       setUniqueCount(map.size);
       setRecent((prev) => {
         const merged = [...prev, ...pending].slice(-RECENT_LIMIT);
@@ -124,10 +125,14 @@ export default function AttendanceSession() {
     }, DETECTION_FLUSH_MS);
   }
 
-  // Called by CameraFeed
+  // Called by CameraFeed at high FPS -> we throttle updates into small batches
   function handleFaceDetected(faces: DetectedFace[]) {
     if (!faces || faces.length === 0) return;
-    pendingRef.current.push(...faces);
+    const normalized = faces.map((f) => ({
+      ...f,
+      timestamp: f.createdAt ? new Date(f.createdAt) : new Date(),
+    }));
+    pendingRef.current.push(...normalized);
     scheduleFlush();
   }
 
@@ -136,7 +141,6 @@ export default function AttendanceSession() {
       matched: true,
       studentId: Number(student.id),
       name: student.name,
-      confidence: 1.0,
       distance: null,
       score: 1,
       threshold: 0,
@@ -146,7 +150,7 @@ export default function AttendanceSession() {
     scheduleFlush();
   }
 
-  // Cleanup
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -154,7 +158,7 @@ export default function AttendanceSession() {
     };
   }, []);
 
-  // Save to API
+  // Save to API using your schema
   async function saveAttendance() {
     if (!selectedClass) {
       setMessage("No class selected.");
@@ -171,10 +175,10 @@ export default function AttendanceSession() {
     try {
       const date = new Date().toISOString().slice(0, 10);
       const items = Array.from(uniq.values()).map((s) => ({
-        student_id: Number(s.studentId ?? s.id),
+        student_id: Number(s.studentId),
         status: "present",
         time: s.createdAt,
-        recognized_name: s.name ?? s.recognizedName ?? s.username,
+        recognized_name: s.name ?? s.recognizedName ?? s.username ?? null,
       }));
 
       const res = await fetch("/api/attendance/history", {
@@ -198,7 +202,9 @@ export default function AttendanceSession() {
     }
   }
 
-  const timeMMSS = `${String(Math.floor(sessionTime / 60)).padStart(2, "0")}:${String(sessionTime % 60).padStart(2, "0")}`;
+  const timeMMSS = `${String(Math.floor(sessionTime / 60)).padStart(2, "0")}:${String(
+    sessionTime % 60
+  ).padStart(2, "0")}`;
 
   return (
     <div className="space-y-6">
@@ -271,9 +277,9 @@ export default function AttendanceSession() {
                   <h4 className="text-sm font-medium">Recent Detections</h4>
                   <div className="flex max-h-20 flex-wrap gap-1 overflow-y-auto">
                     {recent.slice(-RECENT_LIMIT).map((s, i) => (
-                      <Badge key={`${s.studentId ?? s.id}-${i}`} variant="secondary" className="text-xs">
-                        {(s.recognizedName ?? s.name ?? s.username) || "Unknown"}{" "}
-                        {s.score !== null && s.score !== undefined ? `${(s.score * 100).toFixed(0)}%` : ""}
+                      <Badge key={`${s.studentId}-${i}`} variant="secondary" className="text-xs">
+                        {(s.name ?? s.recognizedName ?? s.username ?? "Unknown")}{" "}
+                        {(s.score ?? 0 * 100).toFixed(0)}%
                       </Badge>
                     ))}
                   </div>
