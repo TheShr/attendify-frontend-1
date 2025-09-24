@@ -89,6 +89,7 @@ interface ChartTooltipContentProps extends TooltipProps<number, string> {
   nameKey?: string
   labelKey?: string
   payload?: TooltipPayload<number, string>[]
+  label?: string | number // 👈 added explicitly
 }
 
 /**
@@ -107,7 +108,6 @@ export function ChartTooltipContent({
   formatter,
   color,
   nameKey,
-  labelKey,
 }: ChartTooltipContentProps) {
   const { config } = useChart()
 
@@ -147,7 +147,7 @@ export function ChartTooltipContent({
         className
       )}
     >
-      {!hideLabel && (
+      {!hideLabel && label !== undefined && (
         <div className={cn('mb-1 text-sm font-semibold', labelClassName)}>
           {labelFormatter ? labelFormatter(label, payload) : label}
         </div>
